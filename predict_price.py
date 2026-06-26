@@ -296,7 +296,7 @@ def quick_test():
             print(f"  {test['name']}:")
             print(f"    → {price:,.0f} EGP\n")
         except Exception as e:
-            print(f"  {test['name']}: ❌ Error - {e}\n")
+            print(f"  {test['name']}:  Error - {e}\n")
 
 
 # ============================================================
