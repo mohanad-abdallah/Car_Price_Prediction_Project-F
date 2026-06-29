@@ -161,7 +161,61 @@ def get_price_range(price):
 def format_price(price):
     """Format price with commas"""
     return f"{price:,.0f} EGP"
+def estimate_maintenance(brand, vehicle_age, km_driven, engine):
+    """
+    Estimate annual maintenance cost using simple rules.
+    Returns:
+        maintenance_cost
+        risk_level
+        breakdown
+    """
 
+    maintenance_cost = 3000
+
+    breakdown = {
+        "Base Service": 3000
+    }
+
+    # Age
+    if vehicle_age > 10:
+        maintenance_cost += 4000
+        breakdown["Old Vehicle"] = 4000
+
+    # Mileage
+    if km_driven > 150000:
+        maintenance_cost += 5000
+        breakdown["High Mileage"] = 5000
+
+    # Engine Size
+    if engine > 2000:
+        maintenance_cost += 3000
+        breakdown["Large Engine"] = 3000
+
+    # Premium Brands
+    premium_brands = [
+        "BMW",
+        "Mercedes-Benz",
+        "Audi",
+        "Land",
+        "Jaguar",
+        "Volvo"
+    ]
+
+    if any(p in brand for p in premium_brands):
+        maintenance_cost += 6000
+        breakdown["Premium Brand"] = 6000
+
+    # Risk Level
+    if maintenance_cost <= 7000:
+        risk = "🟢 Low"
+
+    elif maintenance_cost <= 14000:
+        risk = "🟡 Medium"
+
+    else:
+        risk = "🔴 High"
+
+    return maintenance_cost, risk, breakdown
 # ============================================================
 # 5. SIDEBAR - NAVIGATION
 # ============================================================
@@ -290,7 +344,14 @@ if page == "🏠 Predict":
         with st.spinner("🧠 Predicting..."):
             price = predict_price(car_info)
             lower, upper = get_price_range(price)
-        
+            maintenance_cost, risk, breakdown = estimate_maintenance(
+               brand,
+               vehicle_age,
+               km_driven,
+               engine
+            )
+
+            ownership_cost = price + maintenance_cost
         # Display results
         st.markdown("---")
         
@@ -304,7 +365,27 @@ if page == "🏠 Predict":
                 <p>Confidence Range: {format_price(lower)} - {format_price(upper)}</p>
             </div>
             """, unsafe_allow_html=True)
-        
+            st.markdown("## 🔧 Maintenance Estimation")
+
+            col_a, col_b, col_c = st.columns(3)
+
+            with col_a:
+               st.metric(
+                  "Annual Maintenance",
+                   format_price(maintenance_cost)
+                   )
+
+            with col_b:
+                st.metric(
+                    "Risk Level",
+                     risk
+                    )
+
+            with col_c:
+                st.metric(
+                    "Ownership Cost",
+                     format_price(ownership_cost)
+                )
         # Feature impact visualization
         st.markdown("### 📊 Feature Impact")
         
