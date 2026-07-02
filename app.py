@@ -1,11 +1,5 @@
-# ============================================================
-# 🚗 CAR PRICE PREDICTION - STREAMLIT APP
-# ============================================================
-# استخدام: streamlit run app.py
-# ============================================================
 import pandas as pd
 import streamlit as st
-import pandas as pdcd 
 import numpy as np
 import joblib
 import plotly.express as px
@@ -53,15 +47,8 @@ st.markdown("""
         color: white;
         box-shadow: 0 10px 30px rgba(0,0,0,0.2);
     }
-    .price-box h1 {
-        font-size: 3.5rem;
-        margin: 0;
-    }
-    .price-box p {
-        font-size: 1.1rem;
-        opacity: 0.9;
-        margin: 0;
-    }
+    .price-box h1 { font-size: 3.5rem; margin: 0; }
+    .price-box p { font-size: 1.1rem; opacity: 0.9; margin: 0; }
     .feature-card {
         background: #f8f9fa;
         padding: 1rem;
@@ -91,20 +78,11 @@ st.markdown("""
         box-shadow: 0 2px 10px rgba(0,0,0,0.05);
         text-align: center;
     }
-    .metric-card h3 {
-        color: #1E88E5;
-        margin: 0;
-    }
-    .metric-card p {
-        font-size: 1.5rem;
-        font-weight: 600;
-        margin: 0.5rem 0 0 0;
-    }
     </style>
 """, unsafe_allow_html=True)
 
 # ============================================================
-# 3. LOAD ARTIFACTS
+# 3. LOAD ARTIFACTS & DATA
 # ============================================================
 @st.cache_resource
 def load_artifacts():
@@ -119,7 +97,17 @@ def load_artifacts():
         st.error(f"❌ Error loading artifacts: {e}")
         st.stop()
 
+@st.cache_data
+def load_data():
+    """Load the processed dataset for analytics and budget finder"""
+    try:
+        return pd.read_csv('model_ready_no_leakage.csv')
+    except Exception as e:
+        st.warning("⚠️ Could not load CSV data file. Some features may be limited.")
+        return pd.DataFrame() # Return empty df if file missing
+
 model, label_encoders, features, scaler = load_artifacts()
+df = load_data()
 
 # ============================================================
 # 4. HELPER FUNCTIONS
@@ -144,10 +132,10 @@ def predict_price(car_info):
         trans_enc,
         seller_enc
     ]
-    
+
     # Scale features
     input_scaled = scaler.transform([input_features])
-    
+
     # Predict
     price = model.predict(input_scaled)[0]
     return max(price, 50000)  # Minimum reasonable price
@@ -161,20 +149,11 @@ def get_price_range(price):
 def format_price(price):
     """Format price with commas"""
     return f"{price:,.0f} EGP"
+
 def estimate_maintenance(brand, vehicle_age, km_driven, engine):
-    """
-    Estimate annual maintenance cost using simple rules.
-    Returns:
-        maintenance_cost
-        risk_level
-        breakdown
-    """
-
+    """Estimate annual maintenance cost"""
     maintenance_cost = 3000
-
-    breakdown = {
-        "Base Service": 3000
-    }
+    breakdown = {"Base Service": 3000}
 
     # Age
     if vehicle_age > 10:
@@ -192,15 +171,7 @@ def estimate_maintenance(brand, vehicle_age, km_driven, engine):
         breakdown["Large Engine"] = 3000
 
     # Premium Brands
-    premium_brands = [
-        "BMW",
-        "Mercedes-Benz",
-        "Audi",
-        "Land",
-        "Jaguar",
-        "Volvo"
-    ]
-
+    premium_brands = ["BMW", "Mercedes-Benz", "Audi", "Land", "Jaguar", "Volvo"]
     if any(p in brand for p in premium_brands):
         maintenance_cost += 6000
         breakdown["Premium Brand"] = 6000
@@ -208,22 +179,23 @@ def estimate_maintenance(brand, vehicle_age, km_driven, engine):
     # Risk Level
     if maintenance_cost <= 7000:
         risk = "🟢 Low"
-
     elif maintenance_cost <= 14000:
         risk = "🟡 Medium"
-
     else:
         risk = "🔴 High"
 
     return maintenance_cost, risk, breakdown
+
 # ============================================================
 # 5. SIDEBAR - NAVIGATION
 # ============================================================
 st.sidebar.image("https://img.icons8.com/color/96/000000/car--v2.png", width=80)
 st.sidebar.title("🚗 Navigation")
+
+# Added Budget Finder to the list
 page = st.sidebar.radio(
     "Go to",
-    ["🏠 Predict", "📊 Analytics", "📈 Compare", "ℹ️ About"],
+    ["🏠 Predict", "💰 Budget Finder", "📊 Analytics", "📈 Compare", "ℹ️ About"],
     index=0
 )
 
@@ -233,7 +205,6 @@ st.sidebar.markdown("### 📊 Model Performance")
 st.sidebar.metric("R² Score", "87.9%", "✅ Good")
 st.sidebar.metric("MAE", "71,212 EGP", "⬇️")
 st.sidebar.metric("RMSE", "97,999 EGP", "⬇️")
-
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🔧 Best Model")
 st.sidebar.info("Random Forest with Hyperparameter Tuning")
@@ -247,7 +218,7 @@ if page == "🏠 Predict":
     
     # Two columns for input
     col1, col2 = st.columns(2, gap="large")
-    
+
     with col1:
         st.markdown("### 🏷️ Car Details")
         
@@ -279,7 +250,7 @@ if page == "🏠 Predict":
             options=label_encoders['fuel_type'].classes_,
             help="Type of fuel used"
         )
-    
+
     with col2:
         st.markdown("### ⚙️ Specifications")
         
@@ -318,14 +289,14 @@ if page == "🏠 Predict":
             options=[2, 4, 5, 6, 7, 8, 9],
             help="Seating capacity"
         )
-    
+
     # Prediction button
     st.markdown("---")
     predict_col1, predict_col2, predict_col3 = st.columns([1, 2, 1])
-    
+
     with predict_col2:
         predict_clicked = st.button("💰 Predict Price", use_container_width=True)
-    
+
     if predict_clicked:
         # Gather input
         car_info = {
@@ -345,13 +316,14 @@ if page == "🏠 Predict":
             price = predict_price(car_info)
             lower, upper = get_price_range(price)
             maintenance_cost, risk, breakdown = estimate_maintenance(
-               brand,
-               vehicle_age,
-               km_driven,
-               engine
+                brand,
+                vehicle_age,
+                km_driven,
+                engine
             )
 
             ownership_cost = price + maintenance_cost
+        
         # Display results
         st.markdown("---")
         
@@ -365,40 +337,31 @@ if page == "🏠 Predict":
                 <p>Confidence Range: {format_price(lower)} - {format_price(upper)}</p>
             </div>
             """, unsafe_allow_html=True)
+            
             st.markdown("## 🔧 Maintenance Estimation")
 
             col_a, col_b, col_c = st.columns(3)
 
             with col_a:
-               st.metric(
-                  "Annual Maintenance",
-                   format_price(maintenance_cost)
-                   )
+                st.metric("Annual Maintenance", format_price(maintenance_cost))
 
             with col_b:
-                st.metric(
-                    "Risk Level",
-                     risk
-                    )
+                st.metric("Risk Level", risk)
 
             with col_c:
-                st.metric(
-                    "Ownership Cost",
-                     format_price(ownership_cost)
-                )
+                st.metric("Ownership Cost", format_price(ownership_cost))
+
         # Feature impact visualization
         st.markdown("### 📊 Feature Impact")
         
-        # Create feature importance chart
         col_chart1, col_chart2 = st.columns(2)
         
         with col_chart1:
-            # Car info summary
             st.markdown("#### 📋 Car Summary")
             summary_data = {
                 "Feature": ["Brand", "Age", "KM", "Fuel", "Transmission", "Engine", "Power", "Seats"],
                 "Value": [brand, f"{vehicle_age} yrs", f"{km_driven:,}", fuel_type, 
-                         transmission_type, f"{engine} cc", f"{max_power} BHP", seats]
+                        transmission_type, f"{engine} cc", f"{max_power} BHP", seats]
             }
             st.dataframe(pd.DataFrame(summary_data), hide_index=True, use_container_width=True)
         
@@ -432,13 +395,12 @@ if page == "🏠 Predict":
         # Similar cars in market
         st.markdown("### 🔍 Similar Cars in Market")
         
-        # Generate sample similar cars
         similar_cars = pd.DataFrame({
             'Brand': [brand, brand, brand, 'Toyota', 'Hyundai'],
             'Age': [vehicle_age-1, vehicle_age, vehicle_age+1, vehicle_age, vehicle_age],
             'KM': [km_driven-10000, km_driven, km_driven+10000, km_driven-5000, km_driven+5000],
             'Price': [
-                price * 0.9,
+                price * 0.9, 
                 price,
                 price * 1.1,
                 price * 0.85,
@@ -449,132 +411,288 @@ if page == "🏠 Predict":
         st.dataframe(similar_cars, hide_index=True, use_container_width=True)
 
 # ============================================================
-# 7. PAGE: ANALYTICS
+# 7. PAGE: BUDGET FINDER (NEW FEATURE)
+# ============================================================
+elif page == "💰 Budget Finder":
+    st.markdown('<p class="main-header">💰 Budget Finder</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-header">Find real cars within your budget from our database</p>', unsafe_allow_html=True)
+
+    if df.empty:
+        st.error("❌ Data file not found. Cannot use Budget Finder without `model_ready_no_leakage.csv`.")
+    else:
+        min_price = int(df['selling_price'].min())
+        max_price = int(df['selling_price'].max())
+        avg_price = int(df['selling_price'].mean())
+
+        # Stats bar
+        c1, c2, c3 = st.columns(3)
+        with c1: st.metric("💰 Cheapest Car in DB", format_price(min_price))
+        with c2: st.metric("📊 Average Price", format_price(avg_price))
+        with c3: st.metric("🚗 Total Listings", f"{len(df):,}")
+
+        st.markdown("---")
+
+        # Filters
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            budget = st.number_input(
+                "💵 Your Budget (EGP)",
+                min_value=min_price,
+                max_value=max_price,
+                value=min(400000, max_price),
+                step=10000
+            )
+        with col2:
+            budget_tolerance = st.slider("📊 Tolerance (%)", 0, 30, 10,
+                                        help="Allow results slightly above your budget")
+        with col3:
+            preferred_fuel = st.multiselect(
+                "⛽ Fuel Type",
+                options=list(df['fuel_type'].unique()),
+                default=list(df['fuel_type'].unique())
+            )
+
+        col4, col5, col6 = st.columns(3)
+        with col4:
+            max_age = st.slider("📅 Max Age (years)", 1, 30, 15)
+        with col5:
+            max_km = st.number_input("🛣️ Max KM", 10000, 500000, 200000, step=10000)
+        with col6:
+            preferred_trans = st.multiselect(
+                "⚙️ Transmission",
+                options=list(df['transmission_type'].unique()),
+                default=list(df['transmission_type'].unique())
+            )
+
+        st.markdown("---")
+        find_clicked = st.button("🔍 Find Best Cars", use_container_width=True)
+
+        if find_clicked:
+            if not preferred_fuel:
+                st.warning("⚠️ Please select at least one fuel type")
+            elif not preferred_trans:
+                st.warning("⚠️ Please select at least one transmission type")
+            else:
+                max_budget = budget * (1 + budget_tolerance / 100)
+
+                # Filter from real dataset
+                filtered = df[
+                    (df['selling_price'] <= max_budget) &
+                    (df['vehicle_age'] <= max_age) &
+                    (df['km_driven'] <= max_km) &
+                    (df['fuel_type'].isin(preferred_fuel)) &
+                    (df['transmission_type'].isin(preferred_trans))
+                ].copy().sort_values('selling_price')
+
+                if filtered.empty:
+                    st.error("❌ No cars found with these filters.")
+                    # Show nearest options
+                    st.markdown("### 💡 Nearest Available Options (ignoring KM/Age filters):")
+                    nearest = df[
+                        (df['fuel_type'].isin(preferred_fuel)) &
+                        (df['transmission_type'].isin(preferred_trans))
+                    ].nsmallest(5, 'selling_price')[
+                        ['brand', 'model', 'vehicle_age', 'km_driven', 'fuel_type', 'transmission_type', 'selling_price']
+                    ].copy()
+                    nearest['selling_price'] = nearest['selling_price'].apply(format_price)
+                    nearest.columns = ['Brand', 'Model', 'Age', 'KM', 'Fuel', 'Trans', 'Price']
+                    st.dataframe(nearest, hide_index=True, use_container_width=True)
+
+                    cheapest = df[df['fuel_type'].isin(preferred_fuel)]['selling_price'].min()
+                    st.info(f"💡 Minimum price available: **{format_price(cheapest)}** — Try increasing your budget or tolerance.")
+                else:
+                    st.success(f"✅ Found **{len(filtered):,}** cars matching your budget!")
+
+                    # Summary metrics
+                    c1, c2, c3, c4 = st.columns(4)
+                    with c1: st.metric("🚗 Cars Found", f"{len(filtered):,}")
+                    with c2: st.metric("💰 Cheapest", format_price(filtered['selling_price'].min()))
+                    with c3: st.metric("📊 Average", format_price(filtered['selling_price'].mean()))
+                    with c4: st.metric("🏷️ Brands Available", filtered['brand'].nunique())
+
+                    st.markdown("---")
+
+                    # Top 3 picks (unique brands)
+                    st.markdown("### 🏆 Top 3 Best Value Picks")
+                    top3 = filtered.drop_duplicates(subset=['brand']).head(3)
+                    cols = st.columns(3)
+                    colors = [
+                        "linear-gradient(135deg, #11998e 0%, #38ef7d 100%)",
+                        "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                        "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)"
+                    ]
+                    medals = ["🥇", "🥈", "🥉"]
+
+                    for i, (_, row) in enumerate(top3.iterrows()):
+                        with cols[i]:
+                            budget_pct = (row['selling_price'] / budget * 100)
+                            st.markdown(f"""
+                            <div class="price-box" style="background: {colors[i]}; padding: 1.5rem;">
+                                <p style="font-size:1.5rem;">{medals[i]}</p>
+                                <h3 style="margin:0;">{row['brand']} {row['model']}</h3>
+                                <h2 style="margin:0.5rem 0;">{format_price(row['selling_price'])}</h2>
+                                <p>⛽ {row['fuel_type']} | ⚙️ {row['transmission_type']}</p>
+                                <p>📅 {row['vehicle_age']} yrs | 🛣️ {row['km_driven']:,} km</p>
+                                <p>📊 Uses {budget_pct:.0f}% of your budget</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+
+                    st.markdown("---")
+
+                    # Charts
+                    col_l, col_r = st.columns(2)
+                    with col_l:
+                        st.markdown("### 📊 Price by Brand")
+                        brand_avg = filtered.groupby('brand')['selling_price'].mean().sort_values().reset_index()
+                        fig = px.bar(brand_avg, x='brand', y='selling_price',
+                                    title='Average Price per Brand',
+                                    color='selling_price', color_continuous_scale='Greens')
+                        fig.add_hline(y=budget, line_dash="dash", line_color="red",
+                                    annotation_text=f"Budget: {format_price(budget)}")
+                        fig.update_layout(height=350)
+                        st.plotly_chart(fig, use_container_width=True)
+
+                    with col_r:
+                        st.markdown("### ⛽ Fuel Distribution")
+                        fuel_counts = filtered['fuel_type'].value_counts().reset_index()
+                        fig = px.pie(fuel_counts, names='fuel_type', values='count',
+                                    title='Available Cars by Fuel Type',
+                                    color_discrete_sequence=px.colors.qualitative.Set2)
+                        fig.update_layout(height=350)
+                        st.plotly_chart(fig, use_container_width=True)
+
+                    st.markdown("---")
+
+                    # Full table
+                    st.markdown("### 📋 All Matching Cars")
+                    show_df = filtered[['brand', 'model', 'vehicle_age', 'km_driven',
+                                        'fuel_type', 'transmission_type', 'selling_price']].copy()
+                    show_df['selling_price'] = show_df['selling_price'].apply(format_price)
+                    show_df.columns = ['Brand', 'Model', 'Age (yrs)', 'KM Driven', 'Fuel', 'Transmission', 'Price']
+                    st.dataframe(show_df.reset_index(drop=True), hide_index=True, use_container_width=True)
+
+# ============================================================
+# 8. PAGE: ANALYTICS
 # ============================================================
 elif page == "📊 Analytics":
     st.markdown('<p class="main-header">📊 Market Analytics</p>', unsafe_allow_html=True)
     st.markdown('<p class="sub-header">Understanding the used car market in Egypt</p>', unsafe_allow_html=True)
     
-    # Load the processed data
-    @st.cache_data
-    def load_data():
-        return pd.read_csv('model_ready_no_leakage.csv')
-    
-    df = load_data()
-    
-    # Metrics Row
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("📊 Total Cars", f"{len(df):,}")
-    with col2:
-        st.metric("💰 Avg Price", f"{df['selling_price'].mean():,.0f} EGP")
-    with col3:
-        st.metric("📅 Avg Age", f"{df['vehicle_age'].mean():.1f} years")
-    with col4:
-        st.metric("🚗 Most Common", df['brand'].mode()[0])
-    
-    # Charts
-    tab1, tab2, tab3 = st.tabs(["📈 Price Distribution", "🏷️ Brand Analysis", "🔧 Feature Impact"])
-    
-    with tab1:
-        col1, col2 = st.columns(2)
-        
+    if df.empty:
+        st.warning("⚠️ Data file not loaded. Analytics unavailable.")
+    else:
+        # Metrics Row
+        col1, col2, col3, col4 = st.columns(4)
+
         with col1:
-            fig = px.histogram(
-                df, x='selling_price', nbins=50,
-                title='Selling Price Distribution',
-                color_discrete_sequence=['#667eea']
-            )
-            fig.update_layout(showlegend=False)
-            st.plotly_chart(fig, use_container_width=True)
-        
+            st.metric("📊 Total Cars", f"{len(df):,}")
         with col2:
-            fig = px.box(
-                df, y='selling_price',
-                title='Price Range (Box Plot)',
-                color_discrete_sequence=['#764ba2']
+            st.metric("💰 Avg Price", f"{df['selling_price'].mean():,.0f} EGP")
+        with col3:
+            st.metric("📅 Avg Age", f"{df['vehicle_age'].mean():.1f} years")
+        with col4:
+            st.metric("🚗 Most Common", df['brand'].mode()[0])
+
+        # Charts
+        tab1, tab2, tab3 = st.tabs(["📈 Price Distribution", "🏷️ Brand Analysis", "🔧 Feature Impact"])
+
+        with tab1:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                fig = px.histogram(
+                    df, x='selling_price', nbins=50,
+                    title='Selling Price Distribution',
+                    color_discrete_sequence=['#667eea']
+                )
+                fig.update_layout(showlegend=False)
+                st.plotly_chart(fig, use_container_width=True)
+            
+            with col2:
+                fig = px.box(
+                    df, y='selling_price',
+                    title='Price Range (Box Plot)',
+                    color_discrete_sequence=['#764ba2']
+                )
+                fig.update_layout(showlegend=False)
+                st.plotly_chart(fig, use_container_width=True)
+            
+            # Age vs Price
+            fig = px.scatter(
+                df.sample(500), x='vehicle_age', y='selling_price',
+                color='transmission_type',
+                title='Age vs Price (by Transmission)',
+                labels={'vehicle_age': 'Age (years)', 'selling_price': 'Price (EGP)'}
             )
-            fig.update_layout(showlegend=False)
             st.plotly_chart(fig, use_container_width=True)
-        
-        # Age vs Price
-        fig = px.scatter(
-            df.sample(500), x='vehicle_age', y='selling_price',
-            color='transmission_type',
-            title='Age vs Price (by Transmission)',
-            labels={'vehicle_age': 'Age (years)', 'selling_price': 'Price (EGP)'}
-        )
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with tab2:
-        # Top brands
-        brand_stats = df.groupby('brand').agg({
-            'selling_price': ['mean', 'count']
-        }).round(0)
-        brand_stats.columns = ['Avg Price', 'Count']
-        brand_stats = brand_stats.sort_values('Avg Price', ascending=False)
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
+
+        with tab2:
+            # Top brands
+            brand_stats = df.groupby('brand').agg({
+                'selling_price': ['mean', 'count']
+            }).round(0)
+            brand_stats.columns = ['Avg Price', 'Count']
+            brand_stats = brand_stats.sort_values('Avg Price', ascending=False)
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                fig = px.bar(
+                    brand_stats.head(15).reset_index(),
+                    x='brand', y='Avg Price',
+                    title='Top 15 Brands by Average Price',
+                    color='Avg Price',
+                    color_continuous_scale='viridis'
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            
+            with col2:
+                fig = px.pie(
+                    df, names='fuel_type',
+                    title='Fuel Type Distribution',
+                    color_discrete_sequence=px.colors.qualitative.Set3
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+        with tab3:
+            # Feature importance from model
+            st.markdown("### Feature Importance (from Random Forest)")
+            
+            importance_data = {
+                'Feature': ['Max Power', 'Vehicle Age', 'Engine', 'KM Driven', 'Brand', 
+                           'Transmission', 'Fuel Type', 'Seats', 'Seller Type'],
+                'Importance': [0.534, 0.299, 0.103, 0.025, 0.019, 0.009, 0.004, 0.004, 0.003]
+            }
+            importance_df = pd.DataFrame(importance_data)
+            
             fig = px.bar(
-                brand_stats.head(15).reset_index(),
-                x='brand', y='Avg Price',
-                title='Top 15 Brands by Average Price',
-                color='Avg Price',
-                color_continuous_scale='viridis'
+                importance_df,
+                x='Importance', y='Feature',
+                orientation='h',
+                title='Feature Importance Ranking',
+                color='Importance',
+                color_continuous_scale='Blues'
             )
+            fig.update_layout(height=400)
             st.plotly_chart(fig, use_container_width=True)
-        
-        with col2:
-            fig = px.pie(
-                df, names='fuel_type',
-                title='Fuel Type Distribution',
-                color_discrete_sequence=px.colors.qualitative.Set3
+            
+            # Correlation matrix
+            st.markdown("### Correlation Matrix")
+            corr_cols = ['vehicle_age', 'km_driven', 'engine', 'max_power', 'seats', 'selling_price']
+            corr_matrix = df[corr_cols].corr()
+            
+            fig = px.imshow(
+                corr_matrix,
+                text_auto=True,
+                title='Correlation Matrix',
+                color_continuous_scale='RdBu_r',
+                aspect='auto'
             )
+            fig.update_layout(height=500)
             st.plotly_chart(fig, use_container_width=True)
-    
-    with tab3:
-        # Feature importance from model
-        st.markdown("### Feature Importance (from Random Forest)")
-        
-        # Load feature importance if available
-        importance_data = {
-            'Feature': ['Max Power', 'Vehicle Age', 'Engine', 'KM Driven', 'Brand', 
-                       'Transmission', 'Fuel Type', 'Seats', 'Seller Type'],
-            'Importance': [0.534, 0.299, 0.103, 0.025, 0.019, 0.009, 0.004, 0.004, 0.003]
-        }
-        importance_df = pd.DataFrame(importance_data)
-        
-        fig = px.bar(
-            importance_df,
-            x='Importance', y='Feature',
-            orientation='h',
-            title='Feature Importance Ranking',
-            color='Importance',
-            color_continuous_scale='Blues'
-        )
-        fig.update_layout(height=400)
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Correlation matrix
-        st.markdown("### Correlation Matrix")
-        corr_cols = ['vehicle_age', 'km_driven', 'engine', 'max_power', 'seats', 'selling_price']
-        corr_matrix = df[corr_cols].corr()
-        
-        fig = px.imshow(
-            corr_matrix,
-            text_auto=True,
-            title='Correlation Matrix',
-            color_continuous_scale='RdBu_r',
-            aspect='auto'
-        )
-        fig.update_layout(height=500)
-        st.plotly_chart(fig, use_container_width=True)
 
 # ============================================================
-# 8. PAGE: COMPARE
+# 9. PAGE: COMPARE
 # ============================================================
 elif page == "📈 Compare":
     st.markdown('<p class="main-header">📈 Compare Cars</p>', unsafe_allow_html=True)
@@ -582,7 +700,7 @@ elif page == "📈 Compare":
     
     # Input for two cars
     col1, col2 = st.columns(2)
-    
+
     with col1:
         st.markdown("### 🚗 Car 1")
         brand1 = st.selectbox("Brand 1", sorted(label_encoders['brand'].classes_), key='brand1')
@@ -593,7 +711,7 @@ elif page == "📈 Compare":
         engine1 = st.slider("Engine 1", 500, 6000, 1500, key='engine1')
         power1 = st.slider("Power 1", 30, 400, 100, key='power1')
         seats1 = st.selectbox("Seats 1", [2,4,5,6,7,8,9], key='seats1')
-    
+
     with col2:
         st.markdown("### 🚗 Car 2")
         brand2 = st.selectbox("Brand 2", sorted(label_encoders['brand'].classes_), key='brand2')
@@ -604,7 +722,7 @@ elif page == "📈 Compare":
         engine2 = st.slider("Engine 2", 500, 6000, 2000, key='engine2')
         power2 = st.slider("Power 2", 30, 400, 150, key='power2')
         seats2 = st.selectbox("Seats 2", [2,4,5,6,7,8,9], key='seats2')
-    
+
     if st.button("🔄 Compare", use_container_width=True):
         # Predict both
         car1 = {'brand': brand1, 'vehicle_age': age1, 'km_driven': km1, 'fuel_type': fuel1,
@@ -653,21 +771,21 @@ elif page == "📈 Compare":
         # Radar chart for comparison
         st.markdown("### 📊 Feature Comparison")
         
-        features = ['Age', 'KM', 'Engine', 'Power', 'Seats']
+        features_list = ['Age', 'KM', 'Engine', 'Power', 'Seats']
         values1 = [age1, km1/10000, engine1/1000, power1, seats1]
         values2 = [age2, km2/10000, engine2/1000, power2, seats2]
         
         fig = go.Figure()
         fig.add_trace(go.Scatterpolar(
             r=values1,
-            theta=features,
+            theta=features_list,
             fill='toself',
             name=brand1,
             line_color='#667eea'
         ))
         fig.add_trace(go.Scatterpolar(
             r=values2,
-            theta=features,
+            theta=features_list,
             fill='toself',
             name=brand2,
             line_color='#f5576c'
@@ -685,13 +803,12 @@ elif page == "📈 Compare":
         st.plotly_chart(fig, use_container_width=True)
 
 # ============================================================
-# 9. PAGE: ABOUT
+# 10. PAGE: ABOUT
 # ============================================================
 else:
     st.markdown('<p class="main-header">ℹ️ About</p>', unsafe_allow_html=True)
-    
     col1, col2 = st.columns([2, 1])
-    
+
     with col1:
         st.markdown("""
         ## 🚗 Car Price Prediction Project
@@ -725,38 +842,35 @@ else:
         | RMSE | 97,999 EGP |
         | Best Model | Random Forest |
         """)
-        
-        with col2:
-            st.markdown("""
-            ### 📂 Project Files
-            
-            ✅ **best_model.pkl** - Trained model  
-            ✅ **label_encoders.pkl** - Category encoders  
-            ✅ **features.pkl** - Feature list  
-            ✅ **scaler.pkl** - Feature scaler  
-            
-            ### 📊 Data Statistics
-            
-            📊 Total Cars: 13,871  
-            🏷️ Brands: 23  
-            ⛽ Fuel Types: 4  
-            📅 Avg Age: 6.2 years  
-            💰 Avg Price: 562,940 EGP  
-            """)
     
+    with col2:
+        st.markdown("""
+        ### 📂 Project Files
+        
+        ✅ **best_model.pkl** - Trained model  
+        ✅ **label_encoders.pkl** - Category encoders  
+        ✅ **features.pkl** - Feature list  
+        ✅ **scaler.pkl** - Feature scaler  
+        
+        ### 📊 Data Statistics
+        
+        📊 Total Cars: 13,871  
+        🏷️ Brands: 23  
+        ⛽ Fuel Types: 4   
+        📅 Avg Age: 6.2 years  
+        💰 Avg Price: 562,940 EGP  
+        """)
+
     st.markdown("---")
     st.markdown("Made with ❤️ in Egypt")
 
 # ============================================================
-# 10. FOOTER
+# 11. FOOTER
 # ============================================================
 st.markdown("---")
-st.markdown(
-    """
-    <div style="text-align: center; color: #666; padding: 1rem;">
-        <p>🚗 Car Price Predictor v1.0 | Built with Streamlit</p>
-        <p style="font-size: 0.8rem;">Predictions are estimates and should be used for reference only</p>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+st.markdown("""
+<div style="text-align: center; color: #666; padding: 1rem;">
+    <p>🚗 Car Price Predictor v2.0 | Built with Streamlit</p>
+    <p style="font-size: 0.8rem;">Predictions are estimates and should be used for reference only</p>
+</div>
+""", unsafe_allow_html=True)
