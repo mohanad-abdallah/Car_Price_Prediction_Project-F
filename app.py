@@ -92,13 +92,7 @@ def load_artifacts():
         label_encoders = joblib.load('models/label_encoders.pkl')
         features = joblib.load('models/features.pkl')
         
-        # 🔍 Verify model type
-        model_type = str(type(model))
-        if 'GradientBoosting' in model_type:
-            st.sidebar.success("✅ Model: Gradient Boosting")
-        else:
-                model_name = model_type.split(".")[-1].rstrip("'>")
-                st.sidebar.warning(f"⚠️ Model type: {model_name}")        
+        
         return model, label_encoders, features
     except FileNotFoundError:
         st.error("❌ Artifacts not found! Please run model_training.ipynb first.")
@@ -127,8 +121,7 @@ model, label_encoders, features = load_artifacts()
 df = load_data()
 
 # Display success message
-if not df.empty:
-    st.sidebar.success(f"✅ Data loaded: {len(df):,} cars")
+
 
 # ============================================================
 # 4. HELPER FUNCTIONS
@@ -222,11 +215,11 @@ def estimate_maintenance(brand, vehicle_age, km_driven, engine):
 # 5. SIDEBAR - NAVIGATION
 # ============================================================
 st.sidebar.image("https://img.icons8.com/color/96/000000/car--v2.png", width=80)
-st.sidebar.title("🚗 Navigation")
+st.sidebar.title(" Navigation")
 
 page = st.sidebar.radio(
     "Go to",
-    ["🏠 Predict", "💰 Budget Finder", "📊 Analytics", "📈 Compare", "ℹ️ About"],
+    ["🏠 Predict", "💰 Budget Finder", "📊 Analytics", "📈 Compare", ],
     index=0
 )
 
@@ -239,6 +232,20 @@ st.sidebar.metric("RMSE", "99,574 EGP", "⬇️")
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🔧 Best Model")
 st.sidebar.info("Gradient Boosting\n\nNo scaling required ✅")
+
+# ============================================================
+
+st.sidebar.markdown("---")
+
+if 'GradientBoosting' in str(type(model)):
+    st.sidebar.success("✅ Model: Gradient Boosting")
+    
+else:
+    model_name = str(type(model)).split(".")[-1].rstrip("'>")
+    st.sidebar.warning(f"⚠️ Model type: {model_name}")
+
+if not df.empty:
+    st.sidebar.success(f"✅ Data loaded: {len(df):,} cars")
 
 # ============================================================
 # 6. PAGE: PREDICT
@@ -823,75 +830,3 @@ elif page == "📈 Compare":
         )
         st.plotly_chart(fig, use_container_width=True)
 
-# ============================================================
-# 10. PAGE: ABOUT
-# ============================================================
-else:
-    st.markdown('<p class="main-header">ℹ️ About</p>', unsafe_allow_html=True)
-    col1, col2 = st.columns([2, 1])
-
-    with col1:
-        st.markdown("""
-        ## 🚗 Car Price Prediction Project
-        
-        This application uses **Machine Learning** to predict the selling price of used cars in Egypt.
-        
-        ### 📊 How it works:
-        1. **Data Collection**: 15,000+ used car listings from Egypt
-        2. **Data Cleaning**: Removed duplicates, outliers, and missing values
-        3. **Feature Engineering**: Created meaningful features for better predictions
-        4. **Model Training**: Tested multiple models (Gradient Boosting performed best)
-        5. **Model Evaluation**: Achieved 86.39% accuracy with cross-validation
-        
-        ### 🎯 Key Features:
-        - **86.39% R² Score** - Model explains 86.39% of price variance
-        - **74,356 EGP MAE** - Average prediction error
-        - **99,574 EGP RMSE** - Root mean squared error
-        - **5-Fold Cross Validation** - Ensures model reliability
-        
-        ### 🔧 Technologies Used:
-        - Python 🐍
-        - Scikit-Learn
-        - Streamlit
-        - Plotly
-        - Pandas & NumPy
-        
-        ### 📈 Model Performance:
-        | Metric | Value |
-        |--------|-------|
-        | R² Score | 86.39% |
-        | MAE | 74,356 EGP |
-        | RMSE | 99,574 EGP |
-        | Best Model | Gradient Boosting |
-        """)
-    
-    with col2:
-        st.markdown("""
-        ### 📂 Project Files
-        
-        ✅ **best_model.pkl** - Trained model (Gradient Boosting)  
-        ✅ **label_encoders.pkl** - Category encoders  
-        ✅ **features.pkl** - Feature list  
-        
-        ### 📊 Data Statistics
-        
-        📊 Total Cars: 13,511  
-        🏷️ Brands: 23  
-        ⛽ Fuel Types: 4  
-        📅 Avg Age: 6.2 years  
-        💰 Avg Price: 562,940 EGP  
-        """)
-
-    st.markdown("---")
-    st.markdown("Made with ❤️ in Egypt")
-
-# ============================================================
-# 11. FOOTER
-# ============================================================
-st.markdown("---")
-st.markdown("""
-<div style="text-align: center; color: #666; padding: 1rem;">
-    <p>🚗 Car Price Predictor v2.0 | Built with Streamlit</p>
-    <p style="font-size: 0.8rem;">Predictions are estimates and should be used for reference only</p>
-</div>
-""", unsafe_allow_html=True)
