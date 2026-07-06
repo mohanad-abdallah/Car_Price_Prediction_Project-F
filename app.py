@@ -91,8 +91,19 @@ def load_artifacts():
         model = joblib.load('models/best_model.pkl')
         label_encoders = joblib.load('models/label_encoders.pkl')
         features = joblib.load('models/features.pkl')
-        scaler = joblib.load('models/scaler.pkl')
-        return model, label_encoders, features, scaler
+        
+        # 🔍 Verify model type
+        model_type = str(type(model))
+        if 'GradientBoosting' in model_type:
+            st.sidebar.success("✅ Model: Gradient Boosting")
+        else:
+                model_name = model_type.split(".")[-1].rstrip("'>")
+                st.sidebar.warning(f"⚠️ Model type: {model_name}")        
+        return model, label_encoders, features
+    except FileNotFoundError:
+        st.error("❌ Artifacts not found! Please run model_training.ipynb first.")
+        st.info("📁 Required files: models/best_model.pkl, models/label_encoders.pkl, models/features.pkl")
+        st.stop()
     except Exception as e:
         st.error(f"❌ Error loading artifacts: {e}")
         st.stop()
@@ -101,44 +112,61 @@ def load_artifacts():
 def load_data():
     """Load the processed dataset for analytics and budget finder"""
     try:
-        return pd.read_csv('model_ready_no_leakage.csv')
+        df = pd.read_csv('model_ready_no_leakage.csv')
+        return df
+    except FileNotFoundError:
+        st.warning("⚠️ Data file 'model_ready_no_leakage.csv' not found.")
+        st.info("💡 Run used_car_eda.ipynb first to generate the data file.")
+        return pd.DataFrame()
     except Exception as e:
-        st.warning("⚠️ Could not load CSV data file. Some features may be limited.")
-        return pd.DataFrame() # Return empty df if file missing
+        st.warning(f"⚠️ Could not load CSV data file: {e}")
+        return pd.DataFrame()
 
-model, label_encoders, features, scaler = load_artifacts()
+# Load everything
+model, label_encoders, features = load_artifacts()
 df = load_data()
+
+# Display success message
+if not df.empty:
+    st.sidebar.success(f"✅ Data loaded: {len(df):,} cars")
 
 # ============================================================
 # 4. HELPER FUNCTIONS
 # ============================================================
 def predict_price(car_info):
-    """Predict price for a single car"""
-    # Encode categorical features
-    brand_enc = label_encoders['brand'].transform([car_info['brand']])[0]
-    fuel_enc = label_encoders['fuel_type'].transform([car_info['fuel_type']])[0]
-    trans_enc = label_encoders['transmission_type'].transform([car_info['transmission_type']])[0]
-    seller_enc = label_encoders['seller_type'].transform([car_info['seller_type']])[0]
-    
-    # Create feature array
-    input_features = [
-        car_info['vehicle_age'],
-        car_info['km_driven'],
-        car_info['engine'],
-        car_info['max_power'],
-        car_info['seats'],
-        brand_enc,
-        fuel_enc,
-        trans_enc,
-        seller_enc
-    ]
+    """
+    Predict price for a single car
+    IMPORTANT: Gradient Boosting does NOT require feature scaling
+    """
+    try:
+        # Encode categorical features
+        brand_enc = label_encoders['brand'].transform([car_info['brand']])[0]
+        fuel_enc = label_encoders['fuel_type'].transform([car_info['fuel_type']])[0]
+        trans_enc = label_encoders['transmission_type'].transform([car_info['transmission_type']])[0]
+        seller_enc = label_encoders['seller_type'].transform([car_info['seller_type']])[0]
+        
+        # Create feature array (original scale - no scaling needed for Gradient Boosting)
+        input_features = [
+            car_info['vehicle_age'],
+            car_info['km_driven'],
+            car_info['engine'],
+            car_info['max_power'],
+            car_info['seats'],
+            brand_enc,
+            fuel_enc,
+            trans_enc,
+            seller_enc
+        ]
 
-    # Scale features
-    input_scaled = scaler.transform([input_features])
-
-    # Predict
-    price = model.predict(input_scaled)[0]
-    return max(price, 50000)  # Minimum reasonable price
+        # Predict directly - Gradient Boosting is tree-based, no scaling required
+        price = model.predict([input_features])[0]
+        
+        # Ensure minimum reasonable price
+        return max(price, 50000)
+        
+    except Exception as e:
+        st.error(f"❌ Prediction error: {e}")
+        return None
 
 def get_price_range(price):
     """Get price range for confidence interval"""
@@ -155,36 +183,40 @@ def estimate_maintenance(brand, vehicle_age, km_driven, engine):
     maintenance_cost = 3000
     breakdown = {"Base Service": 3000}
 
-    # Age
     if vehicle_age > 10:
         maintenance_cost += 4000
-        breakdown["Old Vehicle"] = 4000
+        breakdown["Old Vehicle (>10 yrs)"] = 4000
+    elif vehicle_age > 5:
+        maintenance_cost += 2000
+        breakdown["Aging Vehicle (5-10 yrs)"] = 2000
 
-    # Mileage
     if km_driven > 150000:
         maintenance_cost += 5000
-        breakdown["High Mileage"] = 5000
+        breakdown["High Mileage (>150k)"] = 5000
+    elif km_driven > 100000:
+        maintenance_cost += 3000
+        breakdown["Medium Mileage (100-150k)"] = 3000
 
-    # Engine Size
     if engine > 2000:
         maintenance_cost += 3000
-        breakdown["Large Engine"] = 3000
+        breakdown["Large Engine (>2000cc)"] = 3000
 
-    # Premium Brands
-    premium_brands = ["BMW", "Mercedes-Benz", "Audi", "Land", "Jaguar", "Volvo"]
+    premium_brands = ["BMW", "Mercedes-Benz", "Audi", "Land", "Jaguar", "Volvo", "Porsche"]
     if any(p in brand for p in premium_brands):
         maintenance_cost += 6000
         breakdown["Premium Brand"] = 6000
 
-    # Risk Level
     if maintenance_cost <= 7000:
         risk = "🟢 Low"
+        risk_emoji = "✅"
     elif maintenance_cost <= 14000:
         risk = "🟡 Medium"
+        risk_emoji = "⚠️"
     else:
         risk = "🔴 High"
+        risk_emoji = "🚨"
 
-    return maintenance_cost, risk, breakdown
+    return maintenance_cost, risk, breakdown, risk_emoji
 
 # ============================================================
 # 5. SIDEBAR - NAVIGATION
@@ -192,7 +224,6 @@ def estimate_maintenance(brand, vehicle_age, km_driven, engine):
 st.sidebar.image("https://img.icons8.com/color/96/000000/car--v2.png", width=80)
 st.sidebar.title("🚗 Navigation")
 
-# Added Budget Finder to the list
 page = st.sidebar.radio(
     "Go to",
     ["🏠 Predict", "💰 Budget Finder", "📊 Analytics", "📈 Compare", "ℹ️ About"],
@@ -202,12 +233,12 @@ page = st.sidebar.radio(
 # Sidebar info
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📊 Model Performance")
-st.sidebar.metric("R² Score", "87.9%", "✅ Good")
-st.sidebar.metric("MAE", "71,212 EGP", "⬇️")
-st.sidebar.metric("RMSE", "97,999 EGP", "⬇️")
+st.sidebar.metric("R² Score", "86.39%", "✅ Good")
+st.sidebar.metric("MAE", "74,356 EGP", "⬇️")
+st.sidebar.metric("RMSE", "99,574 EGP", "⬇️")
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🔧 Best Model")
-st.sidebar.info("Random Forest with Hyperparameter Tuning")
+st.sidebar.info("Gradient Boosting\n\nNo scaling required ✅")
 
 # ============================================================
 # 6. PAGE: PREDICT
@@ -216,7 +247,6 @@ if page == "🏠 Predict":
     st.markdown('<p class="main-header">🚗 Car Price Predictor</p>', unsafe_allow_html=True)
     st.markdown('<p class="sub-header">Predict the selling price of a used car in Egypt</p>', unsafe_allow_html=True)
     
-    # Two columns for input
     col1, col2 = st.columns(2, gap="large")
 
     with col1:
@@ -290,7 +320,6 @@ if page == "🏠 Predict":
             help="Seating capacity"
         )
 
-    # Prediction button
     st.markdown("---")
     predict_col1, predict_col2, predict_col3 = st.columns([1, 2, 1])
 
@@ -298,7 +327,6 @@ if page == "🏠 Predict":
         predict_clicked = st.button("💰 Predict Price", use_container_width=True)
 
     if predict_clicked:
-        # Gather input
         car_info = {
             'brand': brand,
             'vehicle_age': vehicle_age,
@@ -311,11 +339,15 @@ if page == "🏠 Predict":
             'seats': seats
         }
         
-        # Predict
         with st.spinner("🧠 Predicting..."):
             price = predict_price(car_info)
+            
+            if price is None:
+                st.error("❌ Prediction failed. Please check your inputs.")
+                st.stop()
+                
             lower, upper = get_price_range(price)
-            maintenance_cost, risk, breakdown = estimate_maintenance(
+            maintenance_cost, risk, breakdown, risk_emoji = estimate_maintenance(
                 brand,
                 vehicle_age,
                 km_driven,
@@ -324,7 +356,6 @@ if page == "🏠 Predict":
 
             ownership_cost = price + maintenance_cost
         
-        # Display results
         st.markdown("---")
         
         col_result1, col_result2, col_result3 = st.columns([1, 2, 1])
@@ -346,12 +377,11 @@ if page == "🏠 Predict":
                 st.metric("Annual Maintenance", format_price(maintenance_cost))
 
             with col_b:
-                st.metric("Risk Level", risk)
+                st.metric("Risk Level", f"{risk_emoji} {risk}")
 
             with col_c:
                 st.metric("Ownership Cost", format_price(ownership_cost))
 
-        # Feature impact visualization
         st.markdown("### 📊 Feature Impact")
         
         col_chart1, col_chart2 = st.columns(2)
@@ -366,7 +396,6 @@ if page == "🏠 Predict":
             st.dataframe(pd.DataFrame(summary_data), hide_index=True, use_container_width=True)
         
         with col_chart2:
-            # Price range gauge
             fig = go.Figure(go.Indicator(
                 mode="gauge+number+delta",
                 value=price,
@@ -392,7 +421,6 @@ if page == "🏠 Predict":
             fig.update_layout(height=300, margin=dict(l=20, r=20, t=30, b=20))
             st.plotly_chart(fig, use_container_width=True)
         
-        # Similar cars in market
         st.markdown("### 🔍 Similar Cars in Market")
         
         similar_cars = pd.DataFrame({
@@ -407,11 +435,13 @@ if page == "🏠 Predict":
                 price * 0.92
             ]
         })
+        # Ensure KM is not negative
+        similar_cars['KM'] = similar_cars['KM'].apply(lambda x: max(x, 0))
         similar_cars['Price'] = similar_cars['Price'].apply(lambda x: f"{x:,.0f} EGP")
         st.dataframe(similar_cars, hide_index=True, use_container_width=True)
 
 # ============================================================
-# 7. PAGE: BUDGET FINDER (NEW FEATURE)
+# 7. PAGE: BUDGET FINDER
 # ============================================================
 elif page == "💰 Budget Finder":
     st.markdown('<p class="main-header">💰 Budget Finder</p>', unsafe_allow_html=True)
@@ -419,12 +449,12 @@ elif page == "💰 Budget Finder":
 
     if df.empty:
         st.error("❌ Data file not found. Cannot use Budget Finder without `model_ready_no_leakage.csv`.")
+        st.info("💡 Run `used_car_eda.ipynb` first to generate the data file.")
     else:
         min_price = int(df['selling_price'].min())
         max_price = int(df['selling_price'].max())
         avg_price = int(df['selling_price'].mean())
 
-        # Stats bar
         c1, c2, c3 = st.columns(3)
         with c1: st.metric("💰 Cheapest Car in DB", format_price(min_price))
         with c2: st.metric("📊 Average Price", format_price(avg_price))
@@ -432,7 +462,6 @@ elif page == "💰 Budget Finder":
 
         st.markdown("---")
 
-        # Filters
         col1, col2, col3 = st.columns(3)
         with col1:
             budget = st.number_input(
@@ -475,7 +504,6 @@ elif page == "💰 Budget Finder":
             else:
                 max_budget = budget * (1 + budget_tolerance / 100)
 
-                # Filter from real dataset
                 filtered = df[
                     (df['selling_price'] <= max_budget) &
                     (df['vehicle_age'] <= max_age) &
@@ -486,7 +514,6 @@ elif page == "💰 Budget Finder":
 
                 if filtered.empty:
                     st.error("❌ No cars found with these filters.")
-                    # Show nearest options
                     st.markdown("### 💡 Nearest Available Options (ignoring KM/Age filters):")
                     nearest = df[
                         (df['fuel_type'].isin(preferred_fuel)) &
@@ -503,7 +530,6 @@ elif page == "💰 Budget Finder":
                 else:
                     st.success(f"✅ Found **{len(filtered):,}** cars matching your budget!")
 
-                    # Summary metrics
                     c1, c2, c3, c4 = st.columns(4)
                     with c1: st.metric("🚗 Cars Found", f"{len(filtered):,}")
                     with c2: st.metric("💰 Cheapest", format_price(filtered['selling_price'].min()))
@@ -512,7 +538,6 @@ elif page == "💰 Budget Finder":
 
                     st.markdown("---")
 
-                    # Top 3 picks (unique brands)
                     st.markdown("### 🏆 Top 3 Best Value Picks")
                     top3 = filtered.drop_duplicates(subset=['brand']).head(3)
                     cols = st.columns(3)
@@ -539,7 +564,6 @@ elif page == "💰 Budget Finder":
 
                     st.markdown("---")
 
-                    # Charts
                     col_l, col_r = st.columns(2)
                     with col_l:
                         st.markdown("### 📊 Price by Brand")
@@ -563,7 +587,6 @@ elif page == "💰 Budget Finder":
 
                     st.markdown("---")
 
-                    # Full table
                     st.markdown("### 📋 All Matching Cars")
                     show_df = filtered[['brand', 'model', 'vehicle_age', 'km_driven',
                                         'fuel_type', 'transmission_type', 'selling_price']].copy()
@@ -580,8 +603,8 @@ elif page == "📊 Analytics":
     
     if df.empty:
         st.warning("⚠️ Data file not loaded. Analytics unavailable.")
+        st.info("💡 Run `used_car_eda.ipynb` first to generate the data file.")
     else:
-        # Metrics Row
         col1, col2, col3, col4 = st.columns(4)
 
         with col1:
@@ -593,7 +616,6 @@ elif page == "📊 Analytics":
         with col4:
             st.metric("🚗 Most Common", df['brand'].mode()[0])
 
-        # Charts
         tab1, tab2, tab3 = st.tabs(["📈 Price Distribution", "🏷️ Brand Analysis", "🔧 Feature Impact"])
 
         with tab1:
@@ -617,9 +639,8 @@ elif page == "📊 Analytics":
                 fig.update_layout(showlegend=False)
                 st.plotly_chart(fig, use_container_width=True)
             
-            # Age vs Price
             fig = px.scatter(
-                df.sample(500), x='vehicle_age', y='selling_price',
+                df.sample(min(500, len(df))), x='vehicle_age', y='selling_price',
                 color='transmission_type',
                 title='Age vs Price (by Transmission)',
                 labels={'vehicle_age': 'Age (years)', 'selling_price': 'Price (EGP)'}
@@ -627,7 +648,6 @@ elif page == "📊 Analytics":
             st.plotly_chart(fig, use_container_width=True)
 
         with tab2:
-            # Top brands
             brand_stats = df.groupby('brand').agg({
                 'selling_price': ['mean', 'count']
             }).round(0)
@@ -655,13 +675,13 @@ elif page == "📊 Analytics":
                 st.plotly_chart(fig, use_container_width=True)
 
         with tab3:
-            # Feature importance from model
-            st.markdown("### Feature Importance (from Random Forest)")
+            st.markdown("### Feature Importance (from Gradient Boosting)")
             
+            # REAL feature importance values from training
             importance_data = {
-                'Feature': ['Max Power', 'Vehicle Age', 'Engine', 'KM Driven', 'Brand', 
-                           'Transmission', 'Fuel Type', 'Seats', 'Seller Type'],
-                'Importance': [0.534, 0.299, 0.103, 0.025, 0.019, 0.009, 0.004, 0.004, 0.003]
+                'Feature': ['max_power', 'vehicle_age', 'engine', 'brand', 
+                           'transmission', 'km_driven', 'seats', 'fuel_type', 'seller_type'],
+                'Importance': [0.467, 0.320, 0.150, 0.025, 0.020, 0.007, 0.005, 0.003, 0.002]
             }
             importance_df = pd.DataFrame(importance_data)
             
@@ -669,14 +689,15 @@ elif page == "📊 Analytics":
                 importance_df,
                 x='Importance', y='Feature',
                 orientation='h',
-                title='Feature Importance Ranking',
+                title='Feature Importance Ranking (Real Values from Training)',
                 color='Importance',
-                color_continuous_scale='Blues'
+                color_continuous_scale='Blues',
+                text='Importance'
             )
-            fig.update_layout(height=400)
+            fig.update_traces(texttemplate='%{text:.3f}', textposition='outside')
+            fig.update_layout(height=400, xaxis_range=[0, 0.5])
             st.plotly_chart(fig, use_container_width=True)
             
-            # Correlation matrix
             st.markdown("### Correlation Matrix")
             corr_cols = ['vehicle_age', 'km_driven', 'engine', 'max_power', 'seats', 'selling_price']
             corr_matrix = df[corr_cols].corr()
@@ -698,7 +719,6 @@ elif page == "📈 Compare":
     st.markdown('<p class="main-header">📈 Compare Cars</p>', unsafe_allow_html=True)
     st.markdown('<p class="sub-header">Compare prices of different cars</p>', unsafe_allow_html=True)
     
-    # Input for two cars
     col1, col2 = st.columns(2)
 
     with col1:
@@ -724,7 +744,6 @@ elif page == "📈 Compare":
         seats2 = st.selectbox("Seats 2", [2,4,5,6,7,8,9], key='seats2')
 
     if st.button("🔄 Compare", use_container_width=True):
-        # Predict both
         car1 = {'brand': brand1, 'vehicle_age': age1, 'km_driven': km1, 'fuel_type': fuel1,
                 'transmission_type': trans1, 'seller_type': 'Dealer', 'engine': engine1,
                 'max_power': power1, 'seats': seats1}
@@ -735,7 +754,10 @@ elif page == "📈 Compare":
         price1 = predict_price(car1)
         price2 = predict_price(car2)
         
-        # Display comparison
+        if price1 is None or price2 is None:
+            st.error("❌ Prediction failed. Please check your inputs.")
+            st.stop()
+        
         col1, col2, col3 = st.columns([1, 1, 1])
         
         with col1:
@@ -768,7 +790,6 @@ elif page == "📈 Compare":
             </div>
             """, unsafe_allow_html=True)
         
-        # Radar chart for comparison
         st.markdown("### 📊 Feature Comparison")
         
         features_list = ['Age', 'KM', 'Engine', 'Power', 'Seats']
@@ -819,12 +840,13 @@ else:
         1. **Data Collection**: 15,000+ used car listings from Egypt
         2. **Data Cleaning**: Removed duplicates, outliers, and missing values
         3. **Feature Engineering**: Created meaningful features for better predictions
-        4. **Model Training**: Tested 5 different models (Random Forest performed best)
-        5. **Hyperparameter Tuning**: Optimized for 87.9% accuracy
+        4. **Model Training**: Tested multiple models (Gradient Boosting performed best)
+        5. **Model Evaluation**: Achieved 86.39% accuracy with cross-validation
         
         ### 🎯 Key Features:
-        - **87.9% R² Score** - Model explains 87.9% of price variance
-        - **71,212 EGP MAE** - Average prediction error
+        - **86.39% R² Score** - Model explains 86.39% of price variance
+        - **74,356 EGP MAE** - Average prediction error
+        - **99,574 EGP RMSE** - Root mean squared error
         - **5-Fold Cross Validation** - Ensures model reliability
         
         ### 🔧 Technologies Used:
@@ -837,26 +859,25 @@ else:
         ### 📈 Model Performance:
         | Metric | Value |
         |--------|-------|
-        | R² Score | 87.9% |
-        | MAE | 71,212 EGP |
-        | RMSE | 97,999 EGP |
-        | Best Model | Random Forest |
+        | R² Score | 86.39% |
+        | MAE | 74,356 EGP |
+        | RMSE | 99,574 EGP |
+        | Best Model | Gradient Boosting |
         """)
     
     with col2:
         st.markdown("""
         ### 📂 Project Files
         
-        ✅ **best_model.pkl** - Trained model  
+        ✅ **best_model.pkl** - Trained model (Gradient Boosting)  
         ✅ **label_encoders.pkl** - Category encoders  
         ✅ **features.pkl** - Feature list  
-        ✅ **scaler.pkl** - Feature scaler  
         
         ### 📊 Data Statistics
         
-        📊 Total Cars: 13,871  
+        📊 Total Cars: 13,511  
         🏷️ Brands: 23  
-        ⛽ Fuel Types: 4   
+        ⛽ Fuel Types: 4  
         📅 Avg Age: 6.2 years  
         💰 Avg Price: 562,940 EGP  
         """)
